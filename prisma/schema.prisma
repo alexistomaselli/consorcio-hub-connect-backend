@@ -1,0 +1,252 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums globales
+enum UserRole {
+  SUPER_ADMIN
+  BUILDING_ADMIN
+  OWNER
+  SERVICE_PROVIDER
+}
+
+enum BuildingStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum PlanType {
+  FREE
+  BASIC
+  PRO
+}
+
+enum WhatsappStatus {
+  CONNECTED
+  DISCONNECTED
+  PENDING
+  FAILED
+}
+
+enum N8nFlowStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+// Modelos en schema public
+model User {
+  id              String           @id @default(uuid())
+  email           String?          @unique  // Opcional para owners
+  password        String?          // Opcional para owners
+  firstName       String
+  lastName        String
+  dni             String?          @unique  // DNI para identificación única
+  role            UserRole
+  
+  // Campos para autenticación por WhatsApp
+  whatsappNumber  String?          @unique
+  pin             String?          // PIN hasheado para owners
+  recoveryEmail   String?          // Email de recuperación opcional
+  securityQuestions Json?          // Preguntas de seguridad
+  lastLoginAt     DateTime?
+  lastVerifiedAt  DateTime?
+  
+  // Información adicional del usuario
+  unitNumber      String?
+  phoneNumber     String?
+  profilePicture  String?
+  isProfileComplete Boolean        @default(false)
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  serviceProvider ServiceProvider?
+  managedBuildings Building[]      // Un usuario puede administrar múltiples edificios
+  ownedBuildings  BuildingOwner[]  // Relación para owners en múltiples edificios
+
+  @@map("users")
+}
+
+
+
+model Building {
+  id               String         @id @default(uuid())
+  name             String
+  address          String
+  city             String?
+  state            String?
+  country          String?
+  postalCode       String?
+  email            String?         @unique
+  phone            String?
+  logo             String?
+  isActive         Boolean        @default(true)
+  schema           String         @unique // Nombre del schema para este edificio
+  status           BuildingStatus @default(ACTIVE)
+  isProfileComplete Boolean       @default(false)
+  whatsappInstance BuildingWhatsapp?
+  
+  // Información adicional del edificio
+  floors           Int?
+  totalUnits       Int?
+  constructionYear Int?
+  phoneNumber      String?
+  whatsapp         String?
+  website          String?
+  description      String?
+  amenities        String[]       @default([]) // Ej: ["Piscina", "Gimnasio", "Seguridad 24hs"]
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  adminId          String
+  admin            User           @relation(fields: [adminId], references: [id])
+  serviceProviders ServiceProvider[]
+  plan             Plan           @relation(fields: [planId], references: [id])
+  planId           String
+  trialEndsAt      DateTime?      // Null si no está en trial o ya terminó
+  owners           BuildingOwner[]
+  ownerVerifications ownerVerification[]
+
+  @@map("buildings")
+}
+
+model Plan {
+  id          String    @id @default(uuid())
+  type        PlanType  @unique
+  name        String
+  description String
+  price       Float
+  features    String[]
+  buildings   Building[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("plans")
+}
+
+model ServiceProvider {
+  id          String     @id @default(uuid())
+  user        User       @relation(fields: [userId], references: [id])
+  userId      String     @unique
+  company     String
+  services    String[]   // Array de servicios ofrecidos
+  buildings   Building[]
+  rating      Float      @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("service_providers")
+}
+
+// Los siguientes modelos se crearán en cada schema de edificio
+model Unit {
+  id        String   @id @default(uuid())
+  number    String
+  floor     String
+  ownerId   String   // ID del usuario en la tabla users del schema public
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  claims    Claim[]
+
+  @@map("units")
+}
+
+model N8nWebhook {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  prodUrl     String
+  testUrl     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("n8n_webhooks")
+}
+
+model Claim {
+  id               String    @id @default(uuid())
+  title            String
+  description      String
+  status           String    // Enum específico del edificio si es necesario
+  unit             Unit      @relation(fields: [unitId], references: [id])
+  unitId           String
+  creatorId        String    // ID del usuario en la tabla users del schema public
+  serviceProviderId String?  // ID del proveedor en la tabla service_providers del schema public
+  comments         String[]
+  images           String[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("claims")
+}
+
+// Nota: Las tablas Unit y Claim se crearán automáticamente en cada schema de edificio
+// mediante migraciones dinámicas cuando se cree un nuevo edificio
+
+// Tabla para la relación entre propietarios y edificios
+model BuildingOwner {
+  id         String   @id @default(uuid())
+  userId     String
+  buildingId String
+  unitNumber String
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id])
+  building   Building @relation(fields: [buildingId], references: [id])
+
+  @@unique([buildingId, unitNumber])
+  @@map("building_owners")
+}
+
+// Nueva tabla para verificaciones de WhatsApp
+model ownerVerification {
+  id             String   @id @default(uuid())
+  firstName      String
+  lastName       String
+  whatsappNumber String
+  unitNumber     String
+  tempToken      String   @unique
+  verifyCode     String
+  buildingId     String
+  building       Building @relation(fields: [buildingId], references: [id])
+  expiresAt      DateTime
+  isUsed         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("owner_verifications")
+}
+
+model BuildingWhatsapp {
+  id                  String         @id @default(uuid())
+  building            Building       @relation(fields: [buildingId], references: [id])
+  buildingId          String         @unique
+  instanceId          String?        @unique  // Nullable hasta que n8n confirme la creación
+  instanceName        String         // "<buildingName> - <buildingId>"
+  status              WhatsappStatus @default(DISCONNECTED)
+  n8nFlowStatus       N8nFlowStatus  @default(PENDING)
+  evolutionApiStatus  String?        // Estado raw de Evolution API
+  qrCode             String?        // Para el proceso de conexión
+  lastConnectionAttempt DateTime?    // Última vez que se intentó conectar
+  connectionAttempts   Int           @default(0)  // Número de intentos de conexión
+  lastError           String?        // Último error si hubo
+  qrExpiresAt         DateTime?      // Cuando expira el QR
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@map("building_whatsapp")
+}
