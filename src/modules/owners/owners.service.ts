@@ -20,10 +20,7 @@ export class OwnersService {
     const invitations = await this.prisma.ownerVerification.findMany({
       where: {
         buildingId,
-        isUsed: false,
-        expiresAt: {
-          gt: new Date()
-        }
+        isUsed: false
       },
       orderBy: {
         createdAt: 'desc'
@@ -43,38 +40,33 @@ export class OwnersService {
   async getRegisteredOwners(buildingId: string): Promise<Owner[]> {
     const owners = await this.prisma.user.findMany({
       where: {
-        role: UserRole.OWNER,
-        ownedBuildings: {
-          some: {
-            buildingId
-          }
-        }
+        role: UserRole.OWNER
       },
       include: {
-        ownedBuildings: {
-          where: {
-            buildingId
-          },
-          select: {
-            unitNumber: true,
-            isVerified: true
-          }
-        }
+        managedBuildings: true,
+        emailVerifications: true
       },
       orderBy: {
         firstName: 'asc'
       }
     });
 
-    return owners.map(owner => ({
-      id: owner.id,
-      firstName: owner.firstName || '',
-      lastName: owner.lastName || '',
-      email: owner.email || '',
-      phoneNumber: owner.phoneNumber || undefined,
-      whatsappNumber: owner.phoneNumber || undefined,
-      ownedBuildings: owner.ownedBuildings
-    }));
+    return owners
+      .filter(owner => owner.managedBuildings.length > 0)
+      .map(owner => ({
+        id: owner.id,
+        firstName: owner.firstName || '',
+        lastName: owner.lastName || '',
+        email: owner.email || '',
+        phoneNumber: owner.phoneNumber || undefined,
+        whatsappNumber: owner.phoneNumber || undefined,
+        ownedBuildings: owner.managedBuildings
+          .filter(building => building.id === buildingId)
+          .map(building => ({
+            unitNumber: building.id,
+            isVerified: true
+          }))
+      }));
   }
 
   async inviteOwner(buildingId: string, dto: InviteOwnerDto, adminId: string): Promise<InvitationResult> {
@@ -156,9 +148,11 @@ export class OwnersService {
     });
 
     // Enviar mensaje de WhatsApp
+    // Asegurarnos de que la URL use http:// incluso si WhatsApp intenta convertirla
     const verificationUrl = `${process.env.FRONTEND_URL}/register/owner/${tempToken}`;
+    const urlMessage = `Para acceder usa esta dirección (reemplaza https:// por http:// si es necesario):\n${verificationUrl}`;
     const message = `¡Hola ${dto.firstName}! Has sido invitado como propietario en ${building.name}.\n\n` +
-                   `Para completar tu registro, ingresa a:\n${verificationUrl}\n\n` +
+                   `${urlMessage}\n\n` +
                    `Tu código de verificación es: ${verifyCode}\n\n` +
                    `Este link expira en 24 horas.`;
 

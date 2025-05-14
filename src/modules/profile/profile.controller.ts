@@ -17,6 +17,6 @@ export class ProfileController {
     @Body() completeProfileDto: CompleteProfileDto,
     @CurrentUser() user: any,
   ) {
-    return this.profileService.completeProfile(user.id, completeProfileDto);
+    return this.profileService.completeProfile(user.sub, completeProfileDto);
   }
 }

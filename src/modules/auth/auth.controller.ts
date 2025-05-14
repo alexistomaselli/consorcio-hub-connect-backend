@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dtos/register.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -15,11 +16,41 @@ export class AuthController {
     private readonly authService: AuthService,
   ) {}
 
+  @Post('authenticate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Autenticación genérica',
+    description: 'Inicia sesión usando email o WhatsApp'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Autenticación exitosa o requiere verificación',
+    schema: {
+      properties: {
+        requiresVerification: { type: 'boolean' },
+        verificationSent: { type: 'boolean' },
+        token: { type: 'string', description: 'Token JWT (si la autenticación es exitosa)' },
+        user: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            firstName: { type: 'string' },
+            lastName: { type: 'string' },
+            role: { type: 'string' }
+          }
+        }
+      }
+    }
+  })
+  async authenticate(@Body() credentials: AuthCredentialsDto) {
+    return this.authService.authenticate(credentials);
+  }
+
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Iniciar sesión',
-    description: 'Inicia sesión con email y contraseña'
+    summary: 'Iniciar sesión (legacy)',
+    description: 'Inicia sesión con email y contraseña (método anterior)'
   })
   @ApiResponse({ 
     status: 200, 
@@ -150,5 +181,54 @@ export class AuthController {
     return this.authService.registerUser(registerDto);
   }
 
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verificar email',
+    description: 'Verifica el email del usuario usando el código enviado'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email verificado exitosamente',
+    schema: {
+      properties: {
+        verified: { type: 'boolean' }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Código inválido o expirado' })
+  async verifyEmail(
+    @Body('email') email: string,
+    @Body('code') code: string
+  ) {
+    const verified = await this.authService.verifyEmail(email, code);
+    return { verified };
+  }
 
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reenviar código de verificación',
+    description: 'Reenvía el código de verificación al email del usuario'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Código reenviado exitosamente',
+    schema: {
+      properties: {
+        sent: { type: 'boolean' },
+        message: { type: 'string' }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Error al reenviar el código' })
+  async resendVerification(
+    @Body('email') email: string
+  ) {
+    await this.authService.resendVerificationCode(email);
+    return { 
+      sent: true,
+      message: 'Código de verificación reenviado exitosamente'
+    };
+  }
 }

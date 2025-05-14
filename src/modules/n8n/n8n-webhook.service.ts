@@ -57,7 +57,7 @@ export class N8nWebhookService {
     });
   }
 
-  async getWebhookUrl(name: string) {
+  async getWebhook(name: string) {
     const response = await this.findByName(name);
     if (!response.success || !response.data) {
       throw new Error(response.error || `Webhook ${name} not found`);
@@ -66,9 +66,17 @@ export class N8nWebhookService {
     const webhook = response.data;
     // En desarrollo, usar la URL de test si está disponible
     if (process.env.NODE_ENV === 'development' && webhook.testUrl) {
-      return webhook.testUrl;
+      return {
+        ...webhook,
+        prodUrl: webhook.testUrl
+      };
     }
 
+    return webhook;
+  }
+
+  async getWebhookUrl(name: string) {
+    const webhook = await this.getWebhook(name);
     return webhook.prodUrl;
   }
 }

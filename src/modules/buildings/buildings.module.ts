@@ -4,10 +4,10 @@ import { BuildingsController } from './buildings.controller';
 import { WhatsAppController } from './whatsapp.controller';
 import { WhatsAppService } from './whatsapp.service';
 import { PrismaModule } from '../../prisma/prisma.module';
-import { N8nModule } from '../n8n/n8n.module';
+import { N8nWebhookModule } from '../n8n/n8n-webhook.module';
 
 @Module({
-  imports: [PrismaModule, N8nModule],
+  imports: [PrismaModule, N8nWebhookModule],
   controllers: [BuildingsController, WhatsAppController],
   providers: [BuildingsService, WhatsAppService],
   exports: [BuildingsService, WhatsAppService],

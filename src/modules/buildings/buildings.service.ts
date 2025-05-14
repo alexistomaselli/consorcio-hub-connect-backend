@@ -2,16 +2,32 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateBuildingDto } from './dto/create-building.dto';
 import { UpdateBuildingDto } from './dto/update-building.dto';
+import { N8nWebhookService } from '../n8n/n8n-webhook.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class BuildingsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly VERIFICATION_CODE_LENGTH = 6;
+  private readonly VERIFICATION_CODE_EXPIRY_MINUTES = 30;
+
+  constructor(
+    private prisma: PrismaService,
+    private n8nWebhookService: N8nWebhookService
+  ) {}
+
+  private generateVerificationCode(): string {
+    return Math.random()
+      .toString()
+      .slice(2, 2 + this.VERIFICATION_CODE_LENGTH);
+  }
 
   async create(createBuildingDto: CreateBuildingDto, adminId: string) {
     // 1. Verificar que el usuario exista
     const admin = await this.prisma.user.findUnique({
-      where: { id: adminId }
+      where: { id: adminId },
+      include: {
+        emailVerifications: true
+      }
     });
 
     if (!admin) {
@@ -27,25 +43,89 @@ export class BuildingsService {
       throw new Error('Plan gratuito no encontrado');
     }
 
-    // 3. Crear el registro del edificio
-    const building = await this.prisma.building.create({
-      data: {
-        ...createBuildingDto,
-        adminId,
-        planId: freePlan.id,
-        schema: `building_${uuidv4().replace(/-/g, '_')}`, // Generar nombre único para el schema
-        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 días de prueba
-      },
-      include: {
-        admin: true,
-        plan: true
+    // Generar código de verificación
+    const verificationCode = this.generateVerificationCode();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + this.VERIFICATION_CODE_EXPIRY_MINUTES);
+
+    try {
+      // 3. Crear el building y la verificación de email en una transacción
+      const result = await this.prisma.$transaction(async (prisma) => {
+        // Crear el building
+        const building = await prisma.building.create({
+          data: {
+            ...createBuildingDto,
+            adminId,
+            planId: freePlan.id,
+            schema: `building_${uuidv4().replace(/-/g, '_')}`,
+            trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          },
+          include: {
+            admin: true,
+            plan: true
+          }
+        });
+
+        // Crear las tablas en el nuevo schema
+        if (!building.schema) {
+          throw new Error('Error: schema no generado');
+        }
+        await this.createBuildingTables(building.schema);
+
+        // Verificar que el admin tenga email
+        if (!admin.email) {
+          throw new Error('El administrador no tiene email');
+        }
+
+        // Crear o actualizar la verificación de email
+        const emailVerification = await prisma.emailVerification.create({
+          data: {
+            email: admin.email,
+            verificationCode,
+            expiresAt,
+            isVerified: false,
+            user: {
+              connect: {
+                id: admin.id
+              }
+            }
+          }
+        });
+
+        return { building, emailVerification };
+      });
+
+      // 4. Enviar el email de verificación (fuera de la transacción)
+      try {
+        const webhook = await this.n8nWebhookService.getWebhook('send-verification-email');
+        const htmlMessage = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Verificación de Email - ConsorcioHub</h2>
+            <p>Hola ${admin.firstName},</p>
+            <p>Tu código de verificación es: <strong>${verificationCode}</strong></p>
+            <p>Este código expirará en ${this.VERIFICATION_CODE_EXPIRY_MINUTES} minutos.</p>
+          </div>
+        `;
+
+        await fetch(webhook.prodUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userEmail: admin.email,
+            subject: 'Verificación de Email - ConsorcioHub',
+            message: htmlMessage
+          })
+        });
+      } catch (emailError) {
+        // Log el error pero no afecta la creación del building
+        console.error('Error al enviar email de verificación:', emailError);
       }
-    });
 
-    // Crear las tablas en el nuevo schema
-    await this.createBuildingTables(building.schema);
-
-    return building;
+      return result.building;
+    } catch (error) {
+      console.error('Error en la transacción:', error);
+      throw new Error('Error al crear el edificio');
+    }
   }
 
   async createBuildingTables(schema: string) {

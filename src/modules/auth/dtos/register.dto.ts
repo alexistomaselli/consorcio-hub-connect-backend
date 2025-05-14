@@ -1,5 +1,7 @@
-import { IsString, IsEmail, MinLength, MaxLength, IsIn } from 'class-validator';
+import { IsString, IsEmail, MinLength, MaxLength, IsIn, IsObject, ValidateNested } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { BuildingDto } from '../dto/register.dto';
 
 export class RegisterDto {
   @ApiProperty({
@@ -37,20 +39,10 @@ export class RegisterDto {
   lastName: string;
 
   @ApiProperty({
-    description: 'Nombre del edificio',
-    example: 'Edificio San Martín'
+    description: 'Información del edificio'
   })
-  @IsString()
-  @MinLength(3)
-  @MaxLength(100)
-  buildingName: string;
-
-  @ApiProperty({
-    description: 'Nombre del plan seleccionado',
-    example: 'Free',
-    enum: ['Free', 'Basic', 'Pro']
-  })
-  @IsString()
-  @IsIn(['Free', 'Basic', 'Pro'])
-  planName: string;
+  @IsObject()
+  @ValidateNested()
+  @Type(() => BuildingDto)
+  building: BuildingDto;
 }

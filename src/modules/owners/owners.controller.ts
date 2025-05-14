@@ -18,7 +18,26 @@ export class OwnersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener invitaciones pendientes' })
   @ApiParam({ name: 'buildingId', description: 'ID del edificio' })
-  @ApiResponse({ status: 200, description: 'Lista de invitaciones pendientes' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Lista de invitaciones pendientes',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+          whatsappNumber: { type: 'string' },
+          units: { type: 'array', items: { type: 'string' } },
+          status: { type: 'string', enum: ['PENDING_VALIDATION', 'VALIDATED', 'EXPIRED'] },
+          createdAt: { type: 'string', format: 'date-time' },
+          expiresAt: { type: 'string', format: 'date-time' }
+        }
+      }
+    }
+  })
   async getPendingInvitations(
     @Param('buildingId') buildingId: string
   ) {
@@ -30,7 +49,27 @@ export class OwnersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener propietarios registrados' })
   @ApiParam({ name: 'buildingId', description: 'ID del edificio' })
-  @ApiResponse({ status: 200, description: 'Lista de propietarios registrados' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de propietarios registrados',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+          documentType: { type: 'string', enum: ['DNI', 'PASSPORT', 'CUIT', 'CUIL', 'OTHER'] },
+          documentNumber: { type: 'string' },
+          email: { type: 'string' },
+          whatsappNumber: { type: 'string' },
+          units: { type: 'array', items: { type: 'string' } },
+          status: { type: 'string', enum: ['ACTIVE', 'INACTIVE'] }
+        }
+      }
+    }
+  })
   async getRegisteredOwners(
     @Param('buildingId') buildingId: string
   ) {
