@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { N8nWebhookService } from '../n8n/n8n-webhook.service';
+import { WhatsappStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 interface WhatsAppWebhookResponse {
   success: boolean;
@@ -28,6 +30,111 @@ interface WhatsAppErrorDetails {
 
 @Injectable()
 export class WhatsAppService {
+  async updateInstanceStatusByName(instanceName: string, state: string) {
+    console.log(`=== Actualizando estado de instancia ${instanceName} a ${state} ===`);
+
+    try {
+      // Buscar la instancia por nombre
+      const instance = await this.prisma.buildingWhatsapp.findFirst({
+        where: { instanceName }
+      });
+
+      if (!instance) {
+        throw new Error(`No se encontró la instancia ${instanceName}`);
+      }
+
+      // Mapear el estado de Evolution API a nuestro enum
+      let status: WhatsappStatus;
+      switch (state) {
+        case 'open':
+          status = 'CONNECTED' as WhatsappStatus;
+          break;
+        case 'close':
+          status = 'DISCONNECTED' as WhatsappStatus;
+          break;
+        case 'connecting':
+          status = 'CONNECTING' as WhatsappStatus;
+          break;
+        default:
+          status = 'FAILED' as WhatsappStatus;
+      }
+
+      // Actualizar el estado
+      const updateData: Prisma.BuildingWhatsappUpdateInput = {
+        status,
+        evolutionApiStatus: state,
+        ...(state === 'open' && { lastConnection: new Date() })
+      };
+
+      const result = await this.prisma.buildingWhatsapp.update({
+        where: { id: instance.id },
+        data: updateData
+      });
+
+      console.log('Estado actualizado:', result);
+      return result;
+    } catch (error) {
+      console.error('Error al actualizar estado:', error);
+      throw error;
+    }
+  }
+  async getInstanceConnectionStatus(buildingId: string) {
+    const instance = await this.prisma.buildingWhatsapp.findFirst({
+      where: { buildingId },
+      select: {
+        id: true,
+        buildingId: true,
+        instanceName: true,
+        status: true,
+        evolutionApiStatus: true,
+        updatedAt: true
+      }
+    });
+
+    if (!instance) {
+      return null;
+    }
+
+    try {
+      // Obtener el webhook de estado
+      const webhookUrl = await this.n8nWebhookService.getWebhookUrl('whatsapp_get_status');
+
+      // Llamar al webhook de n8n para obtener el estado real de Evolution API
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          buildingId,
+          instanceName: instance.instanceName,
+        }),
+      });
+
+      if (!response.ok) {
+        return {
+          ...instance,
+          status: 'DISCONNECTED',
+          evolutionApiStatus: 'Error al consultar estado'
+        };
+      }
+
+      const data = await response.json();
+
+      return {
+        ...instance,
+        status: data.data.connectionStatus === 'open' ? 'CONNECTED' : 'DISCONNECTED',
+        evolutionApiStatus: data.data.connectionStatus || null
+      };
+    } catch (error) {
+      console.error('Error al consultar el estado:', error);
+      return {
+        ...instance,
+        status: 'DISCONNECTED',
+        evolutionApiStatus: 'Error al consultar estado'
+      };
+    }
+  }
   constructor(
     private prisma: PrismaService,
     private n8nWebhookService: N8nWebhookService,

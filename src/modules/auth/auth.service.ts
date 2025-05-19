@@ -33,22 +33,163 @@ export class AuthService {
     return result;
   }
 
+  private generateSchemaName(buildingId: string): string {
+    // Asegurarse de que el ID es válido y está en el formato correcto
+    if (!buildingId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)) {
+      throw new BadRequestException('ID de building inválido');
+    }
+
+    // Crear el nombre del schema con el formato building_UUID
+    const schemaName = `building_${buildingId.replace(/-/g, '_')}`;
+
+    // Validar que cumple con las restricciones de PostgreSQL
+    if (schemaName.length > 63) {
+      throw new BadRequestException('Nombre de schema demasiado largo');
+    }
+
+    if (!schemaName.match(/^[a-z][a-z0-9_]*$/)) {
+      throw new BadRequestException('Nombre de schema inválido');
+    }
+
+    return schemaName;
+  }
+
+  private async validateSchemaDoesNotExist(prisma: Prisma.TransactionClient, schemaName: string) {
+    const result = await prisma.$queryRaw`
+      SELECT schema_name 
+      FROM information_schema.schemata 
+      WHERE schema_name = ${schemaName}
+    `;
+
+    if (Array.isArray(result) && result.length > 0) {
+      throw new BadRequestException(`El schema ${schemaName} ya existe`);
+    }
+  }
+
   private async createBuildingSchema(prisma: Prisma.TransactionClient, schemaName: string) {
     try {
       // Crear el schema
       await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}";`);
       
-      // Aquí podemos agregar la creación de tablas específicas del building si es necesario
-      // Por ejemplo:
-      // await prisma.$executeRawUnsafe(`
-      //   CREATE TABLE "${schemaName}".expenses (
-      //     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      //     ...
-      //   );
-      // `);
+      // Crear tabla building_service_providers
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE "${schemaName}"."building_service_providers" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "providerId" UUID NOT NULL,
+          "buildingSpecificData" JSONB,
+          "isActive" BOOLEAN DEFAULT true,
+          "rating" FLOAT DEFAULT 0,
+          "contractStartDate" TIMESTAMP(3),
+          "contractEndDate" TIMESTAMP(3),
+          "preferredContactInfo" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL,
+          CONSTRAINT "building_service_providers_providerId_fkey" FOREIGN KEY ("providerId") REFERENCES "public"."service_providers"("id") ON DELETE RESTRICT
+        )
+      `);
+
+      // Crear tabla units
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE "${schemaName}"."units" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "number" VARCHAR(255) NOT NULL,
+          "floor" VARCHAR(255) NOT NULL,
+          "ownerId" VARCHAR(255) NOT NULL,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL
+        )
+      `);
+
+      // Crear tabla claims
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE "${schemaName}"."claims" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "title" VARCHAR(255) NOT NULL,
+          "description" TEXT NOT NULL,
+          "status" VARCHAR(255) NOT NULL,
+          "priority" VARCHAR(50) NOT NULL DEFAULT 'NORMAL',
+          "category" VARCHAR(100),
+          "unitId" UUID NOT NULL,
+          "creatorId" VARCHAR(255) NOT NULL,
+          "serviceProviderId" UUID,
+          "assignedAt" TIMESTAMP(3),
+          "startedAt" TIMESTAMP(3),
+          "completedAt" TIMESTAMP(3),
+          "estimatedCompletionDate" TIMESTAMP(3),
+          "comments" TEXT[] DEFAULT ARRAY[]::TEXT[],
+          "images" TEXT[] DEFAULT ARRAY[]::TEXT[],
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL
+        )
+      `);
+
+      // Agregar foreign keys a claims
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "${schemaName}"."claims"
+        ADD CONSTRAINT "claims_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "${schemaName}"."units"("id") ON DELETE CASCADE
+      `);
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "${schemaName}"."claims"
+        ADD CONSTRAINT "claims_serviceProviderId_fkey" FOREIGN KEY ("serviceProviderId") REFERENCES "${schemaName}"."service_providers"("id") ON DELETE SET NULL
+      `);
+
+      // Crear tabla service_provider_ratings
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE "${schemaName}"."service_provider_ratings" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "serviceProviderId" UUID NOT NULL,
+          "claimId" UUID NOT NULL,
+          "rating" INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+          "comment" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL
+        )
+      `);
+
+      // Agregar constraints a service_provider_ratings
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "${schemaName}"."service_provider_ratings"
+        ADD CONSTRAINT "service_provider_ratings_serviceProviderId_fkey" FOREIGN KEY ("serviceProviderId") REFERENCES "${schemaName}"."service_providers"("id") ON DELETE CASCADE
+      `);
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "${schemaName}"."service_provider_ratings"
+        ADD CONSTRAINT "service_provider_ratings_claimId_fkey" FOREIGN KEY ("claimId") REFERENCES "${schemaName}"."claims"("id") ON DELETE CASCADE
+      `);
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "${schemaName}"."service_provider_ratings"
+        ADD CONSTRAINT "service_provider_ratings_unique" UNIQUE ("serviceProviderId", "claimId")
+      `);
+
+      // Crear índices uno por uno
+      await prisma.$executeRawUnsafe(`CREATE INDEX "units_ownerId_idx" ON "${schemaName}"."units"("ownerId")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "claims_unitId_idx" ON "${schemaName}"."claims"("unitId")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "claims_creatorId_idx" ON "${schemaName}"."claims"("creatorId")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "claims_serviceProviderId_idx" ON "${schemaName}"."claims"("serviceProviderId")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "claims_status_idx" ON "${schemaName}"."claims"("status")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "claims_priority_idx" ON "${schemaName}"."claims"("priority")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "claims_category_idx" ON "${schemaName}"."claims"("category")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "service_providers_name_idx" ON "${schemaName}"."service_providers"("name")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX "service_providers_rating_idx" ON "${schemaName}"."service_providers"("rating")`);
+
+
     } catch (error) {
       console.error('Error al crear el schema del building:', error);
-      throw new BadRequestException('Error al crear el schema del building');
+      
+      // Verificar si el error es por la extensión uuid-ossp
+      if (error.message?.includes('permission denied to create extension')) {
+        throw new BadRequestException('Error: Se requieren permisos de superusuario para crear la extensión uuid-ossp');
+      }
+      
+      // Verificar si el error es por schema duplicado
+      if (error.message?.includes('already exists')) {
+        throw new BadRequestException('Error: El schema ya existe');
+      }
+
+      // Otros errores
+      throw new BadRequestException(`Error al crear el schema del building: ${error.message}`);
     }
   }
 
@@ -192,6 +333,16 @@ export class AuthService {
       }
 
       const result = await this.prisma.$transaction(async (prisma) => {
+        // Generar un UUID para el building
+        const buildingId = crypto.randomUUID();
+        const schemaName = this.generateSchemaName(buildingId);
+
+        // Validar que el schema no existe
+        await this.validateSchemaDoesNotExist(prisma, schemaName);
+
+        // Crear el schema físicamente en la base de datos
+        await this.createBuildingSchema(prisma, schemaName);
+
         // Crear el usuario
         const user = await prisma.user.create({
           data: {
@@ -201,17 +352,15 @@ export class AuthService {
             lastName,
             role: UserRole.BUILDING_ADMIN
           },
-          include: {
-            emailVerifications: true
-          }
         });
 
-        // Crear el edificio con schema temporal
+        // Crear el edificio
         const newBuilding = await prisma.building.create({
           data: {
+            id: buildingId,
             name: building.name,
             address: building.address,
-            schema: 'temp_schema', // Temporal, será actualizado
+            schema: schemaName,
             admin: {
               connect: {
                 id: user.id
@@ -229,21 +378,6 @@ export class AuthService {
           }
         });
 
-        // Actualizar el building con el schema correcto
-        const schemaName = `building_${newBuilding.id}`;
-        const updatedBuilding = await prisma.building.update({
-          where: { id: newBuilding.id },
-          data: {
-            schema: schemaName
-          },
-          include: {
-            plan: true
-          }
-        });
-
-        // Crear el schema físicamente en la base de datos
-        await this.createBuildingSchema(prisma, schemaName);
-
         // Crear verificación de email
         const verificationCode = this.generateVerificationCode();
         const expiresAt = new Date(Date.now() + this.VERIFICATION_CODE_EXPIRY_MINUTES * 60 * 1000);
@@ -258,7 +392,7 @@ export class AuthService {
           }
         });
 
-        return { user, building: updatedBuilding, emailVerification };
+        return { user, building: newBuilding, emailVerification };
       });
 
       // Enviar email de verificación

@@ -1,8 +1,10 @@
-import { Controller, Post, Body, Param, Delete, Get, Patch } from '@nestjs/common';
+import { Controller, Post, Body, Param, Delete, Get, Patch, HttpCode } from '@nestjs/common';
+import { Public } from '../../decorators/public.decorator';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappStatus, N8nFlowStatus } from '@prisma/client';
 import { WhatsAppService } from './whatsapp.service';
+import { UpdateWhatsappStatusDto } from './dto/update-whatsapp-status.dto';
 
 @ApiTags('buildings/whatsapp')
 @Controller('buildings/whatsapp')
@@ -107,6 +109,28 @@ export class WhatsAppController {
     }
   }
 
+  @Get(':buildingId/status')
+  @ApiOperation({ summary: 'Get WhatsApp instance connection status' })
+  @ApiResponse({ status: 200, description: 'WhatsApp instance status found' })
+  async getInstanceStatus(@Param('buildingId') buildingId: string) {
+    try {
+      const result = await this.whatsappService.getInstanceConnectionStatus(buildingId);
+      
+      return {
+        success: true,
+        data: result,
+        message: result ? 'Estado de la instancia obtenido' : 'No hay instancia configurada'
+      };
+    } catch (error) {
+      console.error('Error al obtener el estado de la instancia:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Error al obtener el estado de la instancia de WhatsApp'
+      };
+    }
+  }
+
   @Delete(':buildingId')
   @ApiOperation({ summary: 'Delete WhatsApp instance for building' })
   @ApiResponse({ status: 200, description: 'WhatsApp instance deleted' })
@@ -127,4 +151,36 @@ export class WhatsAppController {
       };
     }
   }
+
+  @Post(':instanceName/status')
+  @Public()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Update WhatsApp instance status by instance name',
+    description: 'Endpoint para recibir actualizaciones de estado desde Evolution API a través de n8n. Maneja los estados: connecting, open (conectado), close (desconectado).'
+  })
+  @ApiResponse({ status: 200, description: 'WhatsApp instance status updated successfully' })
+  @ApiResponse({ status: 404, description: 'WhatsApp instance not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async updateInstanceStatus(
+    @Param('instanceName') instanceName: string,
+    @Body() data: UpdateWhatsappStatusDto
+  ) {
+    try {
+      const result = await this.whatsappService.updateInstanceStatusByName(instanceName, data.data.state);
+      return {
+        success: true,
+        data: result,
+        message: 'Estado de la instancia actualizado correctamente'
+      };
+    } catch (error) {
+      console.error('Error al actualizar el estado de la instancia:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Error al actualizar el estado de la instancia de WhatsApp'
+      };
+    }
+  }
+
 }

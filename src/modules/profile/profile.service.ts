@@ -55,28 +55,25 @@ export class ProfileService {
     // Verificar campos requeridos
     const isComplete = this.validateRequiredFields(data);
 
-    // Actualizar el edificio
-    const updatedBuilding = await this.prisma.$transaction(async (prisma) => {
-      // Cambiar al schema del building
-      await prisma.$executeRawUnsafe(`SET search_path TO "${building.schema}";`);
-
-      // Actualizar el edificio
-      return await prisma.building.update({
-        where: { id: building.id },
-        data: {
-          name: data.buildingName,
-          address: data.address,
-          floors: parseInt(data.floors),
-          totalUnits: parseInt(data.totalUnits),
-          constructionYear: parseInt(data.constructionYear),
-          phoneNumber: data.phoneNumber,
-          whatsapp: data.whatsapp,
-          email: data.email,
-          website: data.website,
-          description: data.description,
-          isProfileComplete: true,
-        },
-      });
+    // Actualizar el edificio en el schema público
+    const updatedBuilding = await this.prisma.building.update({
+      where: { id: building.id },
+      data: {
+        name: data.buildingName,
+        address: data.address,
+        floors: parseInt(data.floors),
+        totalUnits: parseInt(data.totalUnits),
+        constructionYear: data.constructionYear ? parseInt(data.constructionYear) : undefined,
+        phoneNumber: data.phoneNumber,
+        whatsapp: data.whatsapp,
+        email: data.email,
+        website: data.website,
+        description: data.description,
+        isProfileComplete: true,
+      },
+      include: {
+        plan: true
+      }
     });
 
     // Actualizar el usuario administrador
