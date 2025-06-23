@@ -9,14 +9,27 @@ async function bootstrap() {
   // Añadir prefijo global /api a todas las rutas
   //app.setGlobalPrefix('api');
 
-  // Configurar CORS para desarrollo
+  // CORS completamente abierto para desarrollo
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Access-Control-Allow-Origin');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+    
+    next();
+  });
+  
+  // La configuración oficial de CORS para rutas específicas
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8081', 'http://localhost:8082', 'http://localhost'], // Orígenes permitidos
+    origin: '*', // Permite cualquier origen
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range'],
-    maxAge: 3600,
+    allowedHeaders: '*',
   });
 
   // Configurar Swagger
