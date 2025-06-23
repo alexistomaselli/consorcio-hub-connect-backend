@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsArray, IsEnum } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ProviderStatus } from '@prisma/client';
+import { ProviderStatus } from '../enum/provider-status.enum';
 
 export class QueryProvidersDto {
   @IsString()
