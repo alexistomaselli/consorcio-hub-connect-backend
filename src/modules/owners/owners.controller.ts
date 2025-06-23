@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Req, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { OwnersService } from './owners.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,11 +7,48 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { InviteOwnerDto } from './dto/invite-owner.dto';
 import { CompleteRegistrationDto } from './dto/complete-registration.dto';
 import { InvitationResult, VerificationResult, RegistrationResult } from './types';
+import { PrismaService } from '../../prisma/prisma.service';
+import { UserRole } from '@prisma/client';
 
 @ApiTags('owners')
 @Controller('owners')
 export class OwnersController {
-  constructor(private readonly ownersService: OwnersService) {}
+  constructor(private readonly ownersService: OwnersService, private readonly prismaService: PrismaService) {}
+  
+  @Get('debug/buildings/:buildingId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Diagnóstico de propietarios por edificio' })
+  @ApiParam({ name: 'buildingId', description: 'ID del edificio' })
+  async debugOwners(@Param('buildingId') buildingId: string) {
+    // Verificamos si hay usuarios con rol OWNER
+    const allOwners = await this.prismaService.user.findMany({
+      where: {
+        role: UserRole.OWNER
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true
+      }
+    });
+    
+    // Verificamos si hay relaciones BuildingOwner para este edificio
+    const buildingOwners = await this.prismaService.buildingOwner.findMany({
+      where: {
+        buildingId: buildingId
+      }
+    });
+    
+    return {
+      totalOwnersInSystem: allOwners.length,
+      owners: allOwners,
+      totalBuildingOwnerRelations: buildingOwners.length,
+      buildingOwnerRelations: buildingOwners
+    };
+  }
 
   @Get('buildings/:buildingId/invitations')
   @UseGuards(JwtAuthGuard)

@@ -38,35 +38,41 @@ export class OwnersService {
   }
 
   async getRegisteredOwners(buildingId: string): Promise<Owner[]> {
+    // Consulta utilizando la tabla 'users' y su relación 'buildings' correctamente
     const owners = await this.prisma.user.findMany({
       where: {
-        role: UserRole.OWNER
+        role: UserRole.OWNER,
+        buildings: {
+          some: {
+            buildingId: buildingId
+          }
+        }
       },
       include: {
-        managedBuildings: true,
-        emailVerifications: true
+        buildings: {
+          where: {
+            buildingId: buildingId
+          }
+        }
       },
       orderBy: {
         firstName: 'asc'
       }
     });
 
-    return owners
-      .filter(owner => owner.managedBuildings.length > 0)
-      .map(owner => ({
-        id: owner.id,
-        firstName: owner.firstName || '',
-        lastName: owner.lastName || '',
-        email: owner.email || '',
-        phoneNumber: owner.phoneNumber || undefined,
-        whatsappNumber: owner.phoneNumber || undefined,
-        ownedBuildings: owner.managedBuildings
-          .filter(building => building.id === buildingId)
-          .map(building => ({
-            unitNumber: building.id,
-            isVerified: true
-          }))
-      }));
+    // Mapear los resultados al formato esperado por el frontend
+    return owners.map(owner => ({
+      id: owner.id,
+      firstName: owner.firstName || '',
+      lastName: owner.lastName || '',
+      email: owner.email || '',
+      phoneNumber: owner.phoneNumber || undefined,
+      whatsappNumber: owner.phoneNumber || undefined,
+      ownedBuildings: owner.buildings.map(buildingOwner => ({
+        unitNumber: buildingOwner.unitNumber || '',
+        isVerified: buildingOwner.isVerified || false
+      }))
+    }));
   }
 
   async inviteOwner(buildingId: string, dto: InviteOwnerDto, adminId: string): Promise<InvitationResult> {
