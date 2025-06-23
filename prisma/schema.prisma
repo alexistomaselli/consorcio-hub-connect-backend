@@ -153,7 +153,7 @@ model Plan {
   type        PlanType  @unique
   name        String
   description String
-  maxUnits    Int
+  maxUnits    Int?
   price       Float
   features    String[]
   trialDays   Int       @default(0)
