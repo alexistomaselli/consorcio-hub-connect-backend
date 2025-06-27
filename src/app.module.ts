@@ -10,6 +10,7 @@ import { OwnersModule } from './modules/owners/owners.module';
 import { SpacesModule } from './modules/spaces/spaces.module';
 import { ProvidersModule } from './modules/providers/providers.module';
 import { ClaimsModule } from './modules/claims/claims.module';
+import { WhatsAppModule } from './modules/buildings/whatsapp.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ClaimsModule } from './modules/claims/claims.module';
     AuthModule,
     PrismaModule,
     BuildingsModule,
+    WhatsAppModule, // Agregar explícitamente el WhatsAppModule
     UsersModule,
     OwnersModule,
     ProfileModule,
