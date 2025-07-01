@@ -33,16 +33,13 @@ COPY src ./src/
 # Intentamos compilar el código TypeScript para modo producción
 RUN npm run build || echo "Compilation completed with warnings"
 
-# Script de inicio flexible
+# Instalar nodemon globalmente para mejor hot reload
+RUN npm install -g nodemon
+
+# Script de inicio flexible con soporte para hot reload
 RUN echo '#!/bin/bash\n\
-echo "Verificando archivo compilado..."\n\
-if [ -f "dist/main.js" ]; then\n\
-    echo "Iniciando en modo producción desde dist/main.js"\n\
-    node dist/main.js\n\
-else\n\
-    echo "El archivo compilado no existe, iniciando en modo desarrollo..."\n\
-    npm run start:dev\n\
-fi' > start.sh
+echo "Iniciando en modo desarrollo con hot reload..."\n\
+npm run start:dev' > start.sh
 
 RUN chmod +x start.sh
 

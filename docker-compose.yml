@@ -43,8 +43,10 @@ services:
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
+      # No montamos node_modules para evitar incompatibilidades con bcrypt
     networks:
       - consorcio-network
+    command: npm run start:dev
 
   # PgAdmin para administrar la base de datos
   pgadmin:

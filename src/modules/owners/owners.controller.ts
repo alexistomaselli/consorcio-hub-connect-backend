@@ -15,6 +15,34 @@ import { UserRole } from '@prisma/client';
 export class OwnersController {
   constructor(private readonly ownersService: OwnersService, private readonly prismaService: PrismaService) {}
   
+  @Get('me/buildings')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener edificios del propietario actual' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Lista de edificios asociados al propietario',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          address: { type: 'string' },
+          unitNumber: { type: 'string' },
+          isVerified: { type: 'boolean' },
+          logo: { type: 'string', nullable: true }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 403, description: 'Acceso prohibido - Usuario no es propietario' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  async getMyBuildings(@CurrentUser('sub') userId: string) {
+    return this.ownersService.getOwnerBuildings(userId);
+  }
+  
   @Get('debug/buildings/:buildingId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

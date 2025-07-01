@@ -68,7 +68,7 @@ export class N8nWebhookService {
     if (process.env.NODE_ENV === 'development' && webhook.testUrl) {
       return {
         ...webhook,
-        prodUrl: webhook.testUrl
+        prodUrl: webhook.prodUrl
       };
     }
 
