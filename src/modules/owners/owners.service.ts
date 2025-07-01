@@ -38,35 +38,41 @@ export class OwnersService {
   }
 
   async getRegisteredOwners(buildingId: string): Promise<Owner[]> {
+    // Consulta utilizando la tabla 'users' y su relación 'buildings' correctamente
     const owners = await this.prisma.user.findMany({
       where: {
-        role: UserRole.OWNER
+        role: UserRole.OWNER,
+        buildings: {
+          some: {
+            buildingId: buildingId
+          }
+        }
       },
       include: {
-        managedBuildings: true,
-        emailVerifications: true
+        buildings: {
+          where: {
+            buildingId: buildingId
+          }
+        }
       },
       orderBy: {
         firstName: 'asc'
       }
     });
 
-    return owners
-      .filter(owner => owner.managedBuildings.length > 0)
-      .map(owner => ({
-        id: owner.id,
-        firstName: owner.firstName || '',
-        lastName: owner.lastName || '',
-        email: owner.email || '',
-        phoneNumber: owner.phoneNumber || undefined,
-        whatsappNumber: owner.phoneNumber || undefined,
-        ownedBuildings: owner.managedBuildings
-          .filter(building => building.id === buildingId)
-          .map(building => ({
-            unitNumber: building.id,
-            isVerified: true
-          }))
-      }));
+    // Mapear los resultados al formato esperado por el frontend
+    return owners.map(owner => ({
+      id: owner.id,
+      firstName: owner.firstName || '',
+      lastName: owner.lastName || '',
+      email: owner.email || '',
+      phoneNumber: owner.phoneNumber || undefined,
+      whatsappNumber: owner.phoneNumber || undefined,
+      ownedBuildings: owner.buildings.map(buildingOwner => ({
+        unitNumber: buildingOwner.unitNumber || '',
+        isVerified: buildingOwner.isVerified || false
+      }))
+    }));
   }
 
   async inviteOwner(buildingId: string, dto: InviteOwnerDto, adminId: string): Promise<InvitationResult> {
@@ -156,7 +162,19 @@ export class OwnersService {
                    `Tu código de verificación es: ${verifyCode}\n\n` +
                    `Este link expira en 24 horas.`;
 
-    await this.whatsappService.sendTextMessage(buildingId, dto.whatsappNumber, message);
+    console.log('Enviando mensaje de WhatsApp a:', dto.whatsappNumber);
+    try {
+      // Usar el método correcto: sendTextMessage (que toma buildingId primero, luego to, luego message)
+      await this.whatsappService.sendTextMessage(buildingId, dto.whatsappNumber, message);
+    } catch (error) {
+      console.warn('Error al enviar mensaje de WhatsApp:', error.message);
+      console.log('Continuando con el proceso de invitación a pesar del error de WhatsApp');
+      // En desarrollo, permitimos que el flujo continúe incluso si falla el envío del mensaje de WhatsApp
+      // En producción, este error debería ser manejado apropiadamente
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('No se pudo enviar el mensaje de invitación por WhatsApp');
+      }
+    }
 
     return {
       id: verification.id,
@@ -248,5 +266,45 @@ export class OwnersService {
       whatsappNumber: user.phoneNumber || '',
       isProfileComplete: user.isProfileComplete,
     } as RegistrationResult;
+  }
+
+  /**
+   * Obtiene los edificios asociados a un propietario
+   * @param userId ID del usuario propietario
+   * @returns Lista de edificios asociados al propietario
+   */
+  async getOwnerBuildings(userId: string) {
+    // Verificar que el usuario existe y es un propietario
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (user.role !== UserRole.OWNER) {
+      throw new BadRequestException('El usuario no es un propietario');
+    }
+
+    // Obtener las relaciones building-owner para este usuario
+    const buildingOwnerRelations = await this.prisma.buildingOwner.findMany({
+      where: {
+        userId: userId,
+      },
+      include: {
+        building: true,
+      },
+    });
+
+    // Transformar los resultados al formato esperado por el frontend
+    return buildingOwnerRelations.map(relation => ({
+      id: relation.building.id,
+      name: relation.building.name,
+      address: relation.building.address,
+      unitNumber: relation.unitNumber,
+      isVerified: relation.isVerified,
+      logo: relation.building.logo || null,
+    }));
   }
 }

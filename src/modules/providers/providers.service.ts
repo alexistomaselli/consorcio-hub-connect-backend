@@ -4,7 +4,8 @@ import { CreateServiceTypeDto } from './dto/create-service-type.dto';
 import { CreateProviderDto } from './dto/create-provider.dto';
 import { QueryProvidersDto } from './dto/query-providers.dto';
 import { AddBuildingProviderDto } from './dto/add-building-provider.dto';
-import { Prisma, ProviderStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { ProviderStatus } from './enum/provider-status.enum';
 
 @Injectable()
 export class ProvidersService {
@@ -131,13 +132,27 @@ export class ProvidersService {
 
     try {
       // Crear el proveedor con sus relaciones
+      // Convertimos el providerData para que coincida con el esquema actual
+      const providerCreateData = {
+        name: providerData.name,
+        businessName: providerData.name || 'Proveedor',
+        description: providerData.description,
+        email: providerData.email,
+        address: providerData.address,
+        city: providerData.city,
+        state: providerData.state,
+        phone: providerData.phone,
+        status: ProviderStatus.UNVERIFIED,
+        registrationType: 'STANDARD',
+        registeredByType: 'USER',
+        registeredBy: {
+          connect: { id: registeredById },
+        }
+      };
+
       const provider = await this.prisma.serviceProvider.create({
         data: {
-          ...providerData,
-          status: ProviderStatus.UNVERIFIED,
-          registeredBy: {
-            connect: { id: registeredById },
-          },
+          ...providerCreateData,
           serviceTypes: {
             create: serviceTypeIds.map(serviceTypeId => ({
               serviceType: {
@@ -192,7 +207,7 @@ export class ProvidersService {
             { description: { contains: name, mode: 'insensitive' } },
           ],
         } : {},
-        status ? { status } : {},
+        status ? { status: { equals: status } } : {},
         city ? { city: { equals: city, mode: 'insensitive' } } : {},
         state ? { state: { equals: state, mode: 'insensitive' } } : {},
         serviceTypeIdsArray.length > 0 ? {
@@ -218,7 +233,7 @@ export class ProvidersService {
             },
           },
           registeredBy: true,
-          verifiedBy: true,
+          // verifiedBy no existe en el modelo actual
         },
         skip,
         take,
@@ -247,8 +262,7 @@ export class ProvidersService {
       where: { id: providerId },
       data: {
         status: ProviderStatus.VERIFIED,
-        verifiedById,
-        verifiedAt: new Date(),
+        // Solo actualizamos el estado ya que el modelo no tiene verifiedById ni verifiedAt
       },
       include: {
         serviceTypes: {
@@ -257,7 +271,7 @@ export class ProvidersService {
           },
         },
         registeredBy: true,
-        verifiedBy: true,
+        // verifiedBy ya no existe en el modelo actual
       },
     });
   }

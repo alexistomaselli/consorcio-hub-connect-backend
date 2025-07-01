@@ -97,7 +97,7 @@ export class BuildingsService {
 
       // 4. Enviar el email de verificación (fuera de la transacción)
       try {
-        const webhook = await this.n8nWebhookService.getWebhook('send-verification-email');
+        const webhook = await this.n8nWebhookService.getWebhook('email_send_verification');
         const htmlMessage = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Verificación de Email - ConsorcioHub</h2>
@@ -107,15 +107,37 @@ export class BuildingsService {
           </div>
         `;
 
-        await fetch(webhook.prodUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userEmail: admin.email,
-            subject: 'Verificación de Email - ConsorcioHub',
-            message: htmlMessage
-          })
-        });
+        // Usar curl directamente para enviar el email, similar al método implementado en auth.service
+        const { exec } = require('child_process');
+        const { promisify } = require('util');
+        const execPromise = promisify(exec);
+        
+        const emailData = {
+          userEmail: admin.email,
+          subject: 'Verificación de Email - ConsorcioHub',
+          message: htmlMessage
+        };
+        
+        console.log(`Enviando correo de verificación a ${admin.email} usando webhook: ${webhook.prodUrl}`);
+        const curlCommand = `curl -X POST "${webhook.prodUrl}" -H "Content-Type: application/json" -d '${JSON.stringify(emailData).replace(/'/g, "'\''")}' --max-time 15`;
+        
+        console.log('Ejecutando comando curl para envío de correo...');
+        const { stdout, stderr } = await execPromise(curlCommand);
+        
+        if (stderr) {
+          console.warn(`Advertencia de curl al enviar email: ${stderr}`);
+        }
+        
+        console.log(`Respuesta del webhook de correo: ${stdout}`);
+        
+        // Intentar parsear la respuesta si es JSON
+        try {
+          const responseData = JSON.parse(stdout);
+          console.log('Respuesta parseada del webhook:', responseData);
+        } catch (parseError) {
+          // Si no es JSON, solo registramos la respuesta cruda
+          console.log('Respuesta no es JSON válido, respuesta cruda registrada');
+        }
       } catch (emailError) {
         // Log el error pero no afecta la creación del building
         console.error('Error al enviar email de verificación:', emailError);

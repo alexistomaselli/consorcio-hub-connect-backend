@@ -18,6 +18,28 @@ Este proyecto utiliza un modelo simplificado basado en GitFlow para gestionar el
 
 ## Flujo de trabajo
 
+### Trabajo diario y reorganización posterior
+
+Para el desarrollo individual, se puede usar un enfoque más flexible:
+
+1. Trabajar directamente en `develop` durante el día, haciendo commits frecuentes y descriptivos.
+
+2. Al final del día, reorganizar el trabajo en ramas específicas por funcionalidad:
+   ```bash
+   # Crear una rama para la característica trabajada
+   git checkout develop
+   git checkout -b feature/nombre-descriptivo
+   
+   # Seleccionar interactivamente qué cambios incluir
+   git add -p 
+   # O usar cherry-pick para seleccionar commits específicos
+   git cherry-pick <hash-del-commit>
+   
+   git push origin feature/nombre-descriptivo
+   ```
+
+3. Crear un Pull Request para documentar los cambios y eventualmente mergear a `develop`.
+
 ### Desarrollo de nuevas características
 
 1. Crear una nueva rama desde `develop`:

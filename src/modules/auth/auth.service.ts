@@ -75,7 +75,7 @@ export class AuthService {
       await prisma.$executeRawUnsafe(`
         CREATE TABLE "${schemaName}"."building_service_providers" (
           "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          "providerId" UUID NOT NULL,
+          "providerId" TEXT NOT NULL,
           "buildingSpecificData" JSONB,
           "isActive" BOOLEAN DEFAULT true,
           "rating" FLOAT DEFAULT 0,
@@ -111,7 +111,7 @@ export class AuthService {
           "category" VARCHAR(100),
           "unitId" UUID NOT NULL,
           "creatorId" VARCHAR(255) NOT NULL,
-          "serviceProviderId" UUID,
+          "serviceProviderId" TEXT,
           "assignedAt" TIMESTAMP(3),
           "startedAt" TIMESTAMP(3),
           "completedAt" TIMESTAMP(3),
@@ -131,14 +131,14 @@ export class AuthService {
 
       await prisma.$executeRawUnsafe(`
         ALTER TABLE "${schemaName}"."claims"
-        ADD CONSTRAINT "claims_serviceProviderId_fkey" FOREIGN KEY ("serviceProviderId") REFERENCES "${schemaName}"."service_providers"("id") ON DELETE SET NULL
+        ADD CONSTRAINT "claims_serviceProviderId_fkey" FOREIGN KEY ("serviceProviderId") REFERENCES "public"."service_providers"("id") ON DELETE SET NULL
       `);
 
       // Crear tabla service_provider_ratings
       await prisma.$executeRawUnsafe(`
         CREATE TABLE "${schemaName}"."service_provider_ratings" (
           "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          "serviceProviderId" UUID NOT NULL,
+          "serviceProviderId" TEXT NOT NULL,
           "claimId" UUID NOT NULL,
           "rating" INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
           "comment" TEXT,
@@ -150,7 +150,7 @@ export class AuthService {
       // Agregar constraints a service_provider_ratings
       await prisma.$executeRawUnsafe(`
         ALTER TABLE "${schemaName}"."service_provider_ratings"
-        ADD CONSTRAINT "service_provider_ratings_serviceProviderId_fkey" FOREIGN KEY ("serviceProviderId") REFERENCES "${schemaName}"."service_providers"("id") ON DELETE CASCADE
+        ADD CONSTRAINT "service_provider_ratings_serviceProviderId_fkey" FOREIGN KEY ("serviceProviderId") REFERENCES "public"."service_providers"("id") ON DELETE CASCADE
       `);
 
       await prisma.$executeRawUnsafe(`
@@ -171,8 +171,7 @@ export class AuthService {
       await prisma.$executeRawUnsafe(`CREATE INDEX "claims_status_idx" ON "${schemaName}"."claims"("status")`);
       await prisma.$executeRawUnsafe(`CREATE INDEX "claims_priority_idx" ON "${schemaName}"."claims"("priority")`);
       await prisma.$executeRawUnsafe(`CREATE INDEX "claims_category_idx" ON "${schemaName}"."claims"("category")`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX "service_providers_name_idx" ON "${schemaName}"."service_providers"("name")`);
-      await prisma.$executeRawUnsafe(`CREATE INDEX "service_providers_rating_idx" ON "${schemaName}"."service_providers"("rating")`);
+    // No se crean índices para service_providers ya que esta tabla solo existe en el schema public
 
 
     } catch (error) {
@@ -440,18 +439,41 @@ export class AuthService {
           </div>
         `;
 
-        const response = await fetch(webhook.prodUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userEmail: email,
-            subject: 'Verificación de Email - ConsorcioHub',
-            message: htmlMessage
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('Error al enviar el email');
+        // Usar curl directamente para enviar el email, similar al método de WhatsApp
+        const { exec } = require('child_process');
+        const { promisify } = require('util');
+        const execPromise = promisify(exec);
+        
+        const emailData = {
+          userEmail: email,
+          subject: 'Verificación de Email - ConsorcioHub',
+          message: htmlMessage
+        };
+        
+        console.log(`Enviando correo de verificación a ${email} usando webhook: ${webhook.prodUrl}`);
+        const curlCommand = `curl -X POST "${webhook.prodUrl}" -H "Content-Type: application/json" -d '${JSON.stringify(emailData).replace(/'/g, "'\''")}' --max-time 15`;
+        
+        try {
+          console.log('Ejecutando comando curl para envío de correo...');
+          const { stdout, stderr } = await execPromise(curlCommand);
+          
+          if (stderr) {
+            console.warn(`Advertencia de curl al enviar email: ${stderr}`);
+          }
+          
+          console.log(`Respuesta del webhook de correo: ${stdout}`);
+          
+          // Intentar parsear la respuesta si es JSON
+          try {
+            const responseData = JSON.parse(stdout);
+            console.log('Respuesta parseada del webhook:', responseData);
+          } catch (parseError) {
+            // Si no es JSON, solo registramos la respuesta cruda
+            console.log('Respuesta no es JSON válido, respuesta cruda registrada');
+          }
+        } catch (curlError) {
+          console.error(`Error al enviar email con curl: ${curlError.message}`);
+          throw new Error(`Error al enviar el email: ${curlError.message}`);
         }
 
         // Generar token JWT
