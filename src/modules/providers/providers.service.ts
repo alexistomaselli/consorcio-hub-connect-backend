@@ -175,14 +175,7 @@ export class ProvidersService {
               email: true,
             },
           },
-          verifiedBy: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
+          // verifiedBy se ha eliminado porque no existe en el modelo actual
         },
       });
 
@@ -203,7 +196,7 @@ export class ProvidersService {
       AND: [
         name ? {
           OR: [
-            { name: { contains: name, mode: 'insensitive' } },
+            { businessName: { contains: name, mode: 'insensitive' } },
             { description: { contains: name, mode: 'insensitive' } },
           ],
         } : {},
@@ -372,14 +365,7 @@ export class ProvidersService {
               email: true,
             },
           },
-          verifiedBy: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
+          // verifiedBy se ha eliminado porque no existe en el modelo actual
         },
       });
 

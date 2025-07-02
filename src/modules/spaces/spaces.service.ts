@@ -147,12 +147,25 @@ export class SpacesService {
       throw new Error(`Could not get client for building: ${buildingId}`);
     }
     
-    return buildingClient.spaceType.findUnique({
-      where: { id },
-      include: {
-        spaces: true,
-      },
+    // Usando consulta SQL directa en lugar de buildingClient.spaceType que no existe
+    const building = await this.prisma.building.findUnique({
+      where: { id: buildingId },
+      select: { schema: true }
     });
+    
+    if (!building) {
+      throw new Error(`Building con ID ${buildingId} no encontrado`);
+    }
+    
+    const results = await buildingClient.$queryRawUnsafe(`
+      SELECT st.*, 
+        (SELECT json_agg(s) FROM "${building.schema}".spaces s WHERE s.space_type_id = st.id) as spaces
+      FROM "${building.schema}".space_types st 
+      WHERE st.id = '${id}'
+      LIMIT 1;
+    `) as any[];
+    
+    return results[0] || null;
   }
 
   async updateSpaceType(buildingId: string, id: string, updateSpaceTypeDto: CreateSpaceTypeDto) {
