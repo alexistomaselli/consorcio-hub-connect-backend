@@ -11,6 +11,8 @@ import { SpacesModule } from './modules/spaces/spaces.module';
 import { ProvidersModule } from './modules/providers/providers.module';
 import { ClaimsModule } from './modules/claims/claims.module';
 import { WhatsAppModule } from './modules/buildings/whatsapp.module';
+import { RegulationsModule } from './modules/regulations/regulations.module';
+import { FilesModule } from './modules/files/files.module';
 
 @Module({
   imports: [
@@ -26,6 +28,9 @@ import { WhatsAppModule } from './modules/buildings/whatsapp.module';
     N8nModule,
     SpacesModule,
     ProvidersModule,
+    RegulationsModule, // Nuevo módulo para gestionar reglamentos de copropiedad
+    FilesModule, // Nuevo módulo para gestionar archivos genéricos
   ],
+  providers: [],
 })
 export class AppModule {}

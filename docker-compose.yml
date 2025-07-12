@@ -38,6 +38,12 @@ services:
       - JWT_SECRET=${JWT_SECRET:-tu_jwt_secret_seguro}
       - PORT=3000
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8083}
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET_NAME=consorcio-hub
+      - MINIO_USE_SSL=false
     ports:
       - "3000:3000"
     volumes:
@@ -60,6 +66,28 @@ services:
     networks:
       - consorcio-network
 
+  # MinIO - Almacenamiento compatible S3
+  minio:
+    image: minio/minio:latest
+    container_name: consorcio_minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server --console-address ":9001" /data
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console Web
+    networks:
+      - consorcio-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      
   # N8n para automatización (comentado temporalmente)
   # n8n:
   #   image: n8nio/n8n:latest
@@ -86,4 +114,6 @@ volumes:
   postgres_data:
     external: true
     name: backend_postgres_data
+  minio_data:
+    name: consorcio_minio_data
   # n8n-data: # Comentado temporalmente
