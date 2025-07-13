@@ -17,11 +17,20 @@ COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
 
-# Instalamos dependencias, incluyendo las de desarrollo
-RUN npm install --production=false
+# Instalamos dependencias, pero sin bcrypt y sin prisma primero
+RUN npm install --production=false --ignore-scripts
 
-# Aseguramos que bcrypt esté instalado correctamente con sus binarios nativos
-RUN npm rebuild bcrypt --build-from-source || echo "No se pudo reconstruir bcrypt, continuando de todos modos"
+# Eliminamos bcrypt para usar bcryptjs en su lugar (versión JavaScript pura sin dependencias nativas)
+RUN npm uninstall bcrypt
+
+# Instalamos bcryptjs que es compatible con todas las arquitecturas
+RUN npm install bcryptjs
+
+# Copiamos primero el directorio prisma para poder generar el cliente
+COPY ./prisma/ ./prisma/
+
+# Regeneramos prisma con soporte explícito para ARM64
+RUN npx prisma generate
 
 # Copiamos el resto del código fuente
 COPY . .

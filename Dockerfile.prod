@@ -1,0 +1,44 @@
+# Usamos una imagen base para compilar
+FROM node:18.18.2-alpine AS builder
+
+WORKDIR /app
+
+# Instalamos herramientas necesarias para compilación nativa
+RUN apk add --no-cache python3 make g++ build-base
+
+# Copiamos archivos de configuración primero (mejor caché)
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY nest-cli.json ./
+
+# Instalamos dependencias 
+RUN npm ci
+
+# Copiamos el esquema de Prisma y generamos el cliente
+COPY prisma ./prisma/
+RUN npx prisma generate
+
+# Copiamos todo el resto del código fuente
+COPY src ./src/
+
+# Compilamos el código TypeScript para producción
+RUN npm run build
+
+# Etapa de producción con imagen más ligera
+FROM node:18.18.2-alpine
+
+WORKDIR /app
+
+# Copiamos solo los archivos necesarios
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/prisma ./prisma/
+COPY --from=builder /app/dist ./dist/
+COPY --from=builder /app/node_modules ./node_modules/
+
+# Variables de entorno para producción
+ENV NODE_ENV=production
+
+EXPOSE 3000
+
+# Comando para iniciar en modo producción
+CMD ["node", "dist/main"]
