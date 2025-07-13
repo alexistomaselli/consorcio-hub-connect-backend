@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { INestApplication } from '@nestjs/common';
+import { BigIntInterceptor } from './utils/bigint-interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -31,6 +32,9 @@ async function bootstrap() {
     credentials: true,
     allowedHeaders: '*',
   });
+  
+  // Aplicar el interceptor de BigInt a nivel global
+  app.useGlobalInterceptors(new BigIntInterceptor());
 
   // Configurar Swagger
   const config = new DocumentBuilder()
